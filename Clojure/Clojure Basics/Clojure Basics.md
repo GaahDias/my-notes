@@ -1225,5 +1225,3 @@ Similar a `:refer`, o macro `ns` tem o `:import` que nos possibilita a importaç
 
 No exemplo demostrando acima, é importado a classe `Date`, e `UUID` do package `java.util`, e a classe `File` do package `java.io`.
 
- 
-
