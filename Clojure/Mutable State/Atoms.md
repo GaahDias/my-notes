@@ -75,3 +75,33 @@ Com Watcher podemos reagir com base em uma mudança em algum dos tipos mencionad
 
   
 
+### Validator
+
+Novamente, validators não é algo exclusivo de Atoms. Eles são utilizados para validar um dado, antes de atribuílo ao estado do Atom, ou Agent, ou Ref.  Para isso, passamos uma função como validação, e, se o novo estado não conferir com o validator, uma exceção é levantada.
+
+Possuímos apenas duas funções para os Validators:
+
+* **set-validator!**: Declara um validador para um Atom / Agent / Ref. Recebe uma referência como parâmetro, e uma função que deve conter um argumento (que será o novo state a ser passado). `(set-validator! reference validator-fn)`:
+
+  ```clojure
+  (def my-a (atom 10))
+  
+  (set-validator! my-a #(even? %))
+  
+  (swap! my-a - 4)
+  ; 6
+  
+  (swap! my-a + 7)
+  ; Execution error (IllegalStateException) at user/eval11 (REPL:1).
+  ; Invalid reference state
+  ```
+
+  Para remover um validador de uma referência, podemos simplesmente passar ele como `nil`:
+
+  ```clojure
+  (set-validator! my-a nil)
+  
+  (swap! my-a + 7)
+  ; 13
+
+* **get-validator**: Nos retorna o validador de uma referência. `(get-validator reference)`.
