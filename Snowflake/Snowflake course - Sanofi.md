@@ -122,3 +122,48 @@ COPY INTO FIRST_DB.PUBLIC.ORDERS
     // pattern = ('*.csv')
 ```
 É válido mencionar também que o Snowflake armazena metadados dos nossos carregamentos de dados. Com isso, por uma medida de segurança. não é permitido o carregamento duplicado de dados. Ou seja, caso o comando copy seja rodado novamente para o mesmo arquivo, os dados não serão carregados uma segunda vez.
+
+### Trasformando dados no carregamento
+Podemos fazer transformações nos dados que carregamos usando o comando `copy`. Por exemplo, para selecionar apenas algumas colunas do arquivo, faríamos:
+```sql
+CREATE OR REPLACE TABLE FIRST_DB.PUBLIC.ORDERS_EX (
+	ORDER_ID VARCHAR(30),
+	AMOUNT INT
+)
+COPY INTO FIRST_DB.PUBLIC.ORDERS_EX
+    FROM (select s.$1, s.$2 from @MANAGE_DB.external_stages.aws_stage s)
+    file_format=(type = csv field_delimiter = ',' skip_header = 1)
+    files=('OrderDetails.csv');
+```
+Também é possível carregar dados para apenas algumas colunas em específico da nossa tabela (subset de colunas):
+```sql
+CREATE OR REPLACE TABLE FIRST_DB.PUBLIC.ORDERS_EX (
+    ORDER_ID VARCHAR(30),
+    AMOUNT INT,
+    PROFIT INT
+)
+
+COPY INTO FIRST_DB.PUBLIC.ORDERS_EX (ORDER_ID, PROFIT)
+    FROM (select s.$1, s.$3 from @MANAGE_DB.external_stages.aws_stage s)
+    file_format=(type = csv field_delimiter = ',' skip_header = 1)
+    files=('OrderDetails.csv');
+```
+Dentro dos comandos `copy` para a transformação de dados também podemos utilizar um subset de funções SQL. Para consultar todas as funções SQL disponíveis, podemos acessar a [documentação do Snowflake](https://docs.snowflake.com/en/user-guide/data-load-transform.html#supported-functions).
+```sql
+CREATE OR REPLACE TABLE FIRST_DB.PUBLIC.ORDERS_EX (
+    ORDER_ID VARCHAR(30),
+    AMOUNT INT,
+    PROFIT INT,
+    PROFIT_FLAG VARCHAR(30)
+)
+
+COPY INTO FIRST_DB.PUBLIC.ORDERS_EX
+    FROM (select
+          s.$1,
+	  s.$2,
+	  s.$3,
+	  CASE WHEN CAST(s.$3 as int) < 0 THEN 'not profitable' ELSE 'profitable' END
+        from @MANAGE_DB.external_stages.aws_stage s)
+    file_format=(type = csv field_delimiter = ',' skip_header = 1)
+    files=('OrderDetails.csv');
+```
