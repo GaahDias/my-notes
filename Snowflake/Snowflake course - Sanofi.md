@@ -1,4 +1,8 @@
-﻿# Curso de snowflake
+# Curso de snowflake
+
+Anotações do curso [Snowflake - The Complete Masterclass (2022 Edition)](https://www.udemy.com/course/snowflake-masterclass/) realizado na plataforma Udemy.
+
+## Getting Started
 
 ### Novo e antigo console
 No webapp do Snowflake é possível transitar entre a nova interface, com sistema de autocomplete, e o antigo console (clássico).
@@ -39,6 +43,8 @@ COPY INTO LOAN_PAYMENT
  
 Também é válido mencionar dois métodos principais utilizados no carregamento de dados: o **Bulk loading** (mais utilizado, bom para altas quantidades de dados, e possui o comando COPY), e o **Continuous loading** (menos utilizado, bom para pequenas quantidades de dados, e possui a feature serverless snowpipe). Posteriormente esses métodos serão aprofundado em mais detalhes.
  
+ ## Snowflake Architecture
+ 
  ### Data Warehouses
  Uma DW é a integração e consolidação de diferentes DBs, ou seja, são diversos DBs juntos. Isso é feito para que futuramente esses DBs sejam utilizados para análise.  
  Então basicamente o DW é um amontoado de dados providos de diferentes fontes, que podemos utilzar para reportes e análises.
@@ -67,6 +73,8 @@ No Snowflake temos diferentes roles, que dão diferentes permissões para os usu
 
 ![Roles](https://i.imgur.com/B6NbfvU.png)
 
+## Loading Data
+
 ### Stages para carregamento de dados
 Os stages que utilizamos no carregamento de dados nada mais são do que a localização dos dados que serão carregados. Eles podem ser internos (armazenamento local do próprio Snowflake) ou externos (S3 buckets, Google Cloud Platform, Microsoft Azure).
 
@@ -82,7 +90,6 @@ CREATE OR REPLACE STAGE MANAGE_DB.external_stages.aws_stage
     credentials = (aws_key_id = 'ABCD_DUMMY_ID' aws_secret_key = '1234abcd_key');
     
 ```
-
 Alguns outros comandos úteis para manipulação do stage:
 ```sql
 // Description of external stage
@@ -166,4 +173,62 @@ COPY INTO FIRST_DB.PUBLIC.ORDERS_EX
         from @MANAGE_DB.external_stages.aws_stage s)
     file_format=(type = csv field_delimiter = ',' skip_header = 1)
     files=('OrderDetails.csv');
+```
+
+### File Format Object
+
+Até agora nós especificamos qual o formato do arquivo que estávamos carregando no comando `copy` manualmente, através da propriedade `file_format`. Porém, também podemos definir um File Format Object, e reutilizá-lo em vários lugares:
+```sql
+CREATE OR REPLACE SCHEMA MANAGE_DB.file_formats;
+
+CREATE OR REPLACE FILE FORMAT MANAGE_DB.file_formats.csv
+    TYPE = CSV
+    FIELD_DELIMITER = ','
+    SKIP_HEADER = 1;
+```
+Agora para utilizar o file format recém criado, precisamos apenas especificar o `format_name` dentro da propriedade `file_format`:
+```sql
+COPY INTO FIRST_DB.PUBLIC.ORDERS
+    FROM @MANAGE_DB.external_stages.aws_stage
+    file_format = (format_name=MANAGE_DB.file_formats.csv)
+    files = ('OrderDetails.csv');
+```
+Também podemos fazer outras coisas com nossos file formats, como alterar suas propriedades, e ver sua descrição (overview das propriedades):
+```sql
+DESC FILE FORMAT MANAGE_DB.file_formats.csv;
+
+ALTER FILE FORMAT MANAGE_DB.file_formats.csv
+    SET FIELD_DELIMITER = '|';
+```
+
+## Copy Options
+
+### Diferentes opções
+
+Além das propriedades padrões como `FILES` e `FILE_FORMAT`, também podemos adicionar outras propriedades opcionais para nosso copy command. Elas serão utilizadas para personalizar nosso comando, tornando ele mais versátil para diferentes situações. Aqui estão algumas das opções mais importantes que podemos utilizar em nosso comando copy (para maiores detalhes sobre as opções, olhe a [documentação oficial do snowflake](https://docs.snowflake.com/en/sql-reference/sql/copy-into-table.html#copy-options-copyoptions):
+
+* **ON_ERROR:** Especificação para casos de erro no carregamento dos dados. Temos como opções `CONTINUE`, `SKIP_FILE` e `ABORT_STATEMENT`.
+
+![ON_ERROR Option](https://user-images.githubusercontent.com/36492293/173124922-d1bd5027-5cbc-4b26-8633-cc50ae5695f1.png)
+* **RETURN_FAILED_ONLY:** Normalmente utilizado em conjunto com `ON_ERROR`, serve para especificar o retorno de apenas arquivos que falharam no carregamento. Temos como opções `TRUE` ou `FALSE`.
+* **VALIDATION_MODE:** Forma de debug ou validação do comando copy. Adicionando um modo de validação, os dados não serão propriamente carregados, mas apenas testados para saber se o carregamento será bem sucedido ou não. Temos como opções `RETURN_<n>_ROWS`, `RETURN_ERRORS` e `RETURN_ALL_ERRORS`.
+
+![VALIDATION_MODE Option](https://user-images.githubusercontent.com/36492293/173124817-b2853429-7b12-4904-8e08-79c6ed0fa473.png)
+* **SIZE_LIMIT:** Especifica um tamanho máximo em bytes para ser carregado. Vale lembrar que independentemente do tamanho máximo definido, o primeiro arquivo será sempre carregado. Porém, caso o valor exceda logo no primeiro arquivo, o segundo e todos os outros arquivos especificados não serão carregados.
+* **TRUNCATECOLUMNS:** Serve para truncar ou não as colunas de string, varchar ou texto na nossa tabela. Por exemplo, se tivermos uma coluna com o tipo de dado especificado para `VARCHAR(10)`, e no carregamento de dados alguma linha do arquivo ultrapassar esse limite de dez caracteres, com a opção `TRUNCATECOLUMNS` acionada evitaremos um erro e carregaremos apenas os dez primeiros caracteres nesse caso. Temos como opções `TRUE` ou `FALSE`.
+* **FORCE:** Força o carregamento de arquivos mesmo se eles já tenham sido carregados antes e não tenham mudado desde então, o que pode gerar duplicamento de dados. Temos como opções `TRUE` ou `FALSE`.
+
+### Histórico de carregamento
+
+Dentro do Snowflake, conseguimos acessar o histórico do carregamento de dados feito com o comando `COPY INTO <table>` através do schema `INFORMATION_SCHEMA`. Esse schema é criado por padrão em todos os DBs que criarmos no Snowflake. Então, acessando a view `load_history` do mencionado schema, podemos visualizar as informações de todos os carregamentos realizados.
+```sql
+SELECT * FROM FIRST_DB.INFORMATION_SCHEMA.load_history;
+```
+Também podemos acessar o histórico de não apenas um banco em específico, mas de toda a conta do Snowflake. Para isso, deveremos acessar a view localizada em `SNOWFLAKE.ACCOUNT_USAGE.load_history`:
+```sql
+SELECT * FROM SNOWFLAKE.ACCOUNT_USAGE.load_hustory;
+
+SELECT * FROM SNOWFLAKE.ACCOUNT_USAGE.load_history
+    WHERE schema_name = 'PUBLIC'
+    AND TABLE_NAME = 'ORDERS';
 ```
