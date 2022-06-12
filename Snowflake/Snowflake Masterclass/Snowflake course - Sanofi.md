@@ -22,7 +22,7 @@ Podemos carregar dados de arquivos internos no computador, como por exemplo um c
 
 * Carregamento de dados com bucket AWS:
   
-  ```sql
+```sql
 // S3 bucket from lesson 12:
 // s3://bucketsnowflakes3/Loan_payments_data.csv
 
