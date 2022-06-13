@@ -46,6 +46,7 @@ COPY INTO LOAN_PAYMENT
                   skip_header = 1);
 
 ```
+
 Também é válido mencionar dois métodos principais utilizados no carregamento de dados: o **Bulk loading** (mais utilizado, bom para altas quantidades de dados, e possui o comando COPY), e o **Continuous loading** (menos utilizado, bom para pequenas quantidades de dados, e possui a feature serverless snowpipe). Posteriormente esses métodos serão aprofundado em mais detalhes.
 
 ## Snowflake Architecture
@@ -84,6 +85,7 @@ No Snowflake temos diferentes roles, que dão diferentes permissões para os usu
 Os stages que utilizamos no carregamento de dados nada mais são do que a localização dos dados que serão carregados. Eles podem ser internos (armazenamento local do próprio Snowflake) ou externos (S3 buckets, Google Cloud Platform, Microsoft Azure).
 
 Para criar um stage externo, utilizamos os seguintes comandos:
+
 ```sql
 // Db to manage stage objects, file formats, etc.
 CREATE OR REPLACE DATABASE MANAGE_DB;
@@ -294,4 +296,119 @@ SELECT * FROM SNOWFLAKE.ACCOUNT_USAGE.load_hustory;
 SELECT * FROM SNOWFLAKE.ACCOUNT_USAGE.load_history
     WHERE schema_name = 'PUBLIC'
     AND TABLE_NAME = 'ORDERS';
+```
+
+## Loading Unstructured Data
+
+Nem sempre estaremos trabalhando com dados estruturados (colunas e linhas), mas as vezes se ferá necessário o carregamento de dados não estruturados, como JSON e XML. Mas não se preocupe, por que mesmo sendo um banco de dados estruturado, o Snowflake possui uma solução para trabalhar com dados desse tipo de uma forma prática e fácil.
+
+### JSON
+
+Vamos pegar como exemplo o carregamento de dados de um arquivo JSON:
+
+```json
+{
+    "id":2,
+    "first_name":"Dag",
+    "last_name":"Croney",
+    "gender":"Male",
+    "city":"Louny",
+    "job":{
+        "title":"Clinical Specialist",
+        "salary":43000
+    },
+    "spoken_languages":[
+        {
+            "language":"Assamese",
+            "level":"Basic"
+        },
+        {
+            "language":"Papiamento",
+            "level":"Expert"
+        },
+        {
+            "language":"Telugu",
+            "level":"Basic"
+        }
+    ],
+    "prev_company":[
+        "MacGyver, Kessler and Corwin",
+        "Gerlach, Russel and Moen"
+    ]
+}
+```
+
+Como de costume, o primeiro passo é criar um stage para termos acesso a esse arquivo. Também vamos criar um file object compatível com nosso arquivo JSON:
+
+```sql
+CREATE OR REPLACE stage MANAGE_DB.EXTERNAL_STAGES.JSONSTAGE
+     url='s3://bucketsnowflake-jsondemo';
+     
+CREATE OR REPLACE file format MANAGE_DB.FILE_FORMATS.JSONFORMAT
+    TYPE = JSON;
+```
+
+### Tipo de dado Variant
+
+Agora precisaremos utilizar o tipo de dado **Variant**. Ele é usado para manipulações de dados não estruturados, permitindo facilmente que tenhamos acesso as propriedades dos dados. Para maiores informações sobre **Variant**, leia a [documentação do Snowflake](https://docs.snowflake.com/en/sql-reference/data-types-semistructured.html#variant).
+
+Após a criação de uma tabela com o tipo de dado mencionado, vamos usar o comando copy para carregar nosso arquivo JSON:
+
+```sql
+CREATE OR REPLACE table FIRST_DB.PUBLIC.JSON_RAW (
+    raw_file variant);
+    
+COPY INTO FIRST_DB.PUBLIC.JSON_RAW
+    FROM @MANAGE_DB.EXTERNAL_STAGES.JSONSTAGE
+    file_format= MANAGE_DB.FILE_FORMATS.JSONFORMAT
+    files = ('HR_data.json');
+```
+
+Para manipular e acessar os dados inclusos na nossa recém criada tabela, podemos usar o operador `:`. Por exemplo, para acessar os dados de *city*:
+
+```sql
+SELECT RAW_FILE:city FROM FIRST_DB.PUBLIC.JSON_RAW
+```
+
+Agora, isso só se dá para dados na "primeira camada" do nosso JSON. Para acessar informações mais profundas (child attributes), utilizamos o operador `.`. Por exemplo, para acessar o campo *salary* incluso em *jobs*:
+
+```sql
+SELECT RAW_FILE:job.salary as salary FROM FIRST_DB.PUBLIC.JSON_RAW;
+```
+
+E claro, também conseguimos manipular dados em arrays. Para isso, podemos fazer de diferentes maneiras: 
+1. A primeira e mais simples é acessar elemento por elemento incluso em nossa array, da mesma forma como faríamos em qualquer linguagem de programação, com o `[index]`:
+```sql
+SELECT
+    RAW_FILE:prev_company[1] as prev_company
+FROM FIRST_DB.PUBLIC.JSON_RAW;
+```
+2. A segunda forma é utilizando a função `ARRAY_SIZE()`, que retorna a quantidade de elementos em cada array:
+```sql
+SELECT
+    ARRAY_SIZE(RAW_FILE:prev_company) as prev_company
+FROM FIRST_DB.PUBLIC.JSON_RAW;
+```
+3. Outra forma é utilizar `UNION` para o relacionamento dos itens da array. Aqui também utilizaremos um pouco de syntax sugar para a conversão dos tipos de dados com o operador `::`:
+```sql
+SELECT 
+    RAW_FILE:id::int as id,  
+    RAW_FILE:first_name::STRING as first_name,
+    RAW_FILE:prev_company[0]::STRING as prev_company
+FROM FIRST_DB.PUBLIC.JSON_RAW
+UNION ALL 
+SELECT 
+    RAW_FILE:id::int as id,  
+    RAW_FILE:first_name::STRING as first_name,
+    RAW_FILE:prev_company[1]::STRING as prev_company
+FROM FIRST_DB.PUBLIC.JSON_RAW
+ORDER BY id
+```
+4. Agora, a forma acima apesar de ser funcional, não é muito eficiente, visto que teríamos que fazer um union para cada item da array. Tendo isso em mente podemos usar a função `flatten()` para acessar de uma forma mais dinâmica os itens de nossa array (para maiores informações sobre flatten, leia a [documentação do Snowflake](https://docs.snowflake.com/en/sql-reference/functions/flatten.html)):
+```sql
+SELECT
+    RAW_FILE:first_name::STRING as first_name,
+    f.value:language::STRING as language,
+    f.value:level::STRING as level_spoken,
+FROM FIRST_DB.PUBLIC.JSON_RAW, table(flatten(RAW_FILE:spoken_languages)) f
 ```
