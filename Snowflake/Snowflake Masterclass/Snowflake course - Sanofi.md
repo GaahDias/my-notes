@@ -52,8 +52,7 @@ Também é válido mencionar dois métodos principais utilizados no carregamento
 ## Snowflake Architecture
 
 ### Data Warehouses
-Uma DW é a integração e consolidação de diferentes DBs, ou seja, são diversos DBs juntos. Isso é feito para que futuramente esses DBs sejam utilizados para análise.  
-Então basicamente o DW é um amontoado de dados providos de diferentes fontes, que podemos utilzar para reportes e análises.
+Uma DW é a integração e consolidação de diferentes DBs, ou seja, são diversos DBs juntos. Isso é feito para que futuramente esses DBs sejam utilizados para análise. Então basicamente o DW é um amontoado de dados providos de diferentes fontes, que podemos utilzar para reportes e análises.
 
 O processo de criação de uma DW é chamado de **ETL** (Extract, Transform & Load).
 
@@ -411,4 +410,76 @@ SELECT
     f.value:language::STRING as language,
     f.value:level::STRING as level_spoken,
 FROM FIRST_DB.PUBLIC.JSON_RAW, table(flatten(RAW_FILE:spoken_languages)) f
+```
+
+## Performance Optimization
+
+A performance de um banco de dados ou de um data warehouse é sempre algo a se analisar minuciosamente, visto que é um ponto importantíssimo para um bom funcionamento dos nossos dados. Tradicionalmente em um banco de dados, nós precisaríamos nos atentar principalmente a:
+* Adicionar indexes e primary keys
+* Criar partições de tabelas
+* Analisar a execução das queries
+* Remover scans gerais desnecessários em nossas tabelas
+
+Porém, enquanto os métodos apresentados acima ainda são muito importantes e boas práticas para qualquer banco, o próprio Snowflake já toma conta disso por nós, através de micro partições (micro-partitions) automatizadas. Então, como dito anteriormente, embora os pontos apresentados sejam importantíssimos, no Snowflake nós normalmente vamos nos preocupar mais com:
+* Atribuir os tipos de dados ideais para nossas colunas
+* Dimensionar warehouses virtuais
+* Cluster keys
+
+### Virtual Warehouses
+
+Para a melhor separação de trabalhos, otimização de recursos e controle de acessos, podemos criar diferentes DWs virtuais para cada grupo específico do nosso projeto. Por exemplo:
+
+![Diferentes Setores](https://user-images.githubusercontent.com/36492293/173667852-5ea28cf8-6ac5-4304-96cb-82b255b1ed78.png)
+
+Cada grupo ilustrado na imagem acima teria acesso a um DW virtual diferente, com diferentes permissões e recursos. Agora vamos ver como fazer a criação desses Datawarehouses:
+
+```sql
+//  Create virtual warehouse for data scientist & DBA
+// Data Scientists
+CREATE WAREHOUSE DS_WH 
+WITH WAREHOUSE_SIZE = 'SMALL'
+WAREHOUSE_TYPE = 'STANDARD' 
+AUTO_SUSPEND = 300 
+AUTO_RESUME = TRUE 
+MIN_CLUSTER_COUNT = 1 
+MAX_CLUSTER_COUNT = 1 
+SCALING_POLICY = 'STANDARD';
+
+// DBA
+CREATE WAREHOUSE DBA_WH 
+WITH WAREHOUSE_SIZE = 'XSMALL'
+WAREHOUSE_TYPE = 'STANDARD' 
+AUTO_SUSPEND = 300 
+AUTO_RESUME = TRUE 
+MIN_CLUSTER_COUNT = 1 
+MAX_CLUSTER_COUNT = 1 
+SCALING_POLICY = 'STANDARD';
+```
+
+### Roles e Usuários
+
+E claro, para controlar o acesso dos grupos também precisaremos criar diferentes roles e usuários:
+
+```sql
+// Create role for Data Scientists & DBAs
+CREATE ROLE DATA_SCIENTIST;
+GRANT USAGE ON WAREHOUSE DS_WH TO ROLE DATA_SCIENTIST;
+
+CREATE ROLE DBA;
+GRANT USAGE ON WAREHOUSE DBA_WH TO ROLE DBA;
+
+// Setting up users with roles
+// Data Scientists
+CREATE USER DS1 PASSWORD = 'DS1' LOGIN_NAME = 'DS1' DEFAULT_ROLE='DATA_SCIENTIST' DEFAULT_WAREHOUSE = 'DS_WH'  MUST_CHANGE_PASSWORD = FALSE;
+CREATE USER DS2 PASSWORD = 'DS2' LOGIN_NAME = 'DS2' DEFAULT_ROLE='DATA_SCIENTIST' DEFAULT_WAREHOUSE = 'DS_WH'  MUST_CHANGE_PASSWORD = FALSE;
+
+GRANT ROLE DATA_SCIENTIST TO USER DS1;
+GRANT ROLE DATA_SCIENTIST TO USER DS2;
+
+// DBAs
+CREATE USER DBA1 PASSWORD = 'DBA1' LOGIN_NAME = 'DBA1' DEFAULT_ROLE='DBA' DEFAULT_WAREHOUSE = 'DBA_WH'  MUST_CHANGE_PASSWORD = FALSE;
+CREATE USER DBA2 PASSWORD = 'DBA2' LOGIN_NAME = 'DBA2' DEFAULT_ROLE='DBA' DEFAULT_WAREHOUSE = 'DBA_WH'  MUST_CHANGE_PASSWORD = FALSE;
+
+GRANT ROLE DBA TO USER DBA1;
+GRANT ROLE DBA TO USER DBA2;
 ```
