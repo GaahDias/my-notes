@@ -719,8 +719,6 @@ for k, v := range a {
 // 2 30
 ```
 
-
-
 ## Error Handling
 
 A forma de se lidar com erros em Go é certamente uma das partes mais singulares da linguagem. Para fazer um bom uso das técnicas de error handling em Go, precisamos ver sobre **Defer**, **Panic** e **Recover**.
@@ -881,6 +879,615 @@ func main() {
 
 Com isso nossa aplicação pode continuar normalmente mesmo com o `panic("something bad happened")`, todavia a função main não será mais executada após o panic, o que significa que o nosso `fmt.Println("end")` não é considerado.
 
-
-
 ## Pointers
+
+Pointer em Go tem o mesmo princípio que o de linguagens mais tradicionais como C e C++. Temos dois operadores principais para se trabalhar com ponteiros, `*` e `&`.
+
+```go
+num := 10
+var pNum *int = &num
+fmt.Println(num, pNum) // 10 0xc000018030
+fmt.Println(&num, *pNum) // 0xc000018030 10
+```
+
+Como demonstrado acima, utilizamos o operador `&` para retornar um endereço de memória de uma variável. Já que o operador `*` é usado para desreferenciar um endeço de memória, e retornar o valor armazenado naquele pedaço de memória. Ele também é utilizado para referenciar um pointer em sua declaração.
+
+#### Operações aritméticas com ponteiros
+
+Infelizmente em Go ponteiros não são tão dinâmicos quanto os das linguagens mencionadas acima, C e C++. Isso significa que não podemos trabalhar com pointers arithmetic, que seria o acesso dinâmico a certos endereços de memória através de operações de adição ou subtração com os mesmos.  Isso acontece por conta do design da linguagem, de ser o mais simples e entendível possível, coisa que na maior parte dos casos não acontece com operações aritmética em ponteiros. Porém, se realmente for necessário o uso dessa técnica em uma aplicação em Go, podemos utilizar o [pacote unsafe]([unsafe package - unsafe - Go Packages](https://pkg.go.dev/unsafe)).
+
+#### Função new()
+
+Outro ponto relevante para ser esclarecido quando falamos de ponteiros em Go é o uso da função `new()`. Ela é utilizada para inicializar um ponteiro de um tipo especifico em um endeço de memória. Por exemplo:
+
+```go
+var n1 *int
+var n2 = new(int)
+fmt.Println(n1, n2, *n2) // <nil> 0xc000018030 0
+```
+
+Ambos `n1` e `n2` são do tipo `*int`, ou seja, ponteiros de integers, porém `n2` já é de fato inicializado e armazena o valor padrão para integers que é zero, enquanto `n1` não.
+
+## Functions
+
+Boas funções são fundamentais para um código limpo e bem organizado. É por isso que vamos olhar com mais foco e detalhe as funções em Go.
+
+#### Declaração
+
+A criação de uma função se dá com o uso da keyword `func`, seguido de seu nome. Ela também pode tomar argumentos, e um tipo de retorno:
+
+```go
+func sum(n1, n2 int) int {
+    return n1 + n2
+}
+```
+
+#### Retorno
+
+A forma mais simples de se retornar um valor de uma função é especificando qual será o tipo de dado que será retornado na sua declaração, como feito no exemplo acima. Porém, também podemos inicializar uma variável onde normalmente especificaríamos o tipo de retorno:
+
+```go
+func sum(n1, n2 int) (result int) {
+    result = n1 + n2
+    return
+}
+```
+
+Dessa forma o retorno da nossa função já fica implícito que será o valor armazenado na variável declarada.
+
+E como já foi visto anteriormente, também podemos ter múltiplos retornos em nossas funções. Essa especialidade normalmente é utilizada para o retorno de possíveis erros:
+
+```go
+func divide(x, y float64) (float64, error) {
+    if x <= 0 || y <= 0 {
+        return 0, fmt.Errorf("Value zero or lower provided.")
+    }
+    return x / y, nil
+}
+```
+
+#### Número dinâmico de argumentos
+
+Para se trabalhar com um número não previsível de argumentos em uma função, utilizamos o operador `...`:
+
+```go
+func sum(values ...int) int {
+    r := 0
+    for _, v := range values {
+        r += v
+    }
+    return r
+}
+
+sum(1, 2, 3) // 6
+```
+
+#### Funções anônimas
+
+Funções anonimas são funções que não possuem um nome em sua declaração, logo não podem ser usadas em nenhum outro lugar da aplicação que não seja onde ela é criada. Um exemplo de funções anônimas seria:
+
+```go
+func() {
+    fmt.Println("Função anônima")
+}()
+```
+
+Note que nós declaramos a função sem um nome em específico, e ao final dela executamos a mesma com `()`.
+
+Também podemos passar argumentos para nossas funções anônimas, e armazenar elas em variáveis, ou seja, trabalhando com first-class functions:
+
+```go
+z := func(x, y int) int {
+    return x + y
+}
+z(2, 3) // 5
+```
+
+#### Métodos
+
+Métodos em Go nada mais são que funções vinculadas a um `type` criado pelo desenvolvedor. Normalmente são usadas com structs, mas não se limitam apenas a isso. Um exemplo simples de método seria:
+
+```go
+func main() {
+    g := greeter{
+        greeting: "Hi",
+        name: "Gabriel",
+    }
+    g.greet() // Hi Gabriel
+}
+type greeter struct {
+    greeting string
+    name string
+}
+func (g greeter) greet() {
+    fmt.Println(g.greeting, g.name)
+}
+```
+
+Lembrando que a estrutura greeter passada nesse caso é apenas uma cópia, e não a estrutura em si. Mas podemos mudar isso com ponteiros:
+
+```go
+func main() {
+    g := greeter{
+        greeting: "Hi",
+        name: "Gabriel",
+    }
+    g.greet() // Hi Outro nome
+}
+type greeter struct {
+    greeting string
+    name string
+}
+func (g *greeter) greet() {
+    g.name = "Outro nome"
+    fmt.Println(g.greeting, g.name)
+}
+```
+
+## Interfaces
+
+O propósito de uma interface é o de unificar tipos, como structs ou classes para linguagens orientadas a objetos, com características em comum. Elas servem como uma forma de contrato entre os tipos, que garante que qualquer tipo com a interface implementada terá certas funções ou comportamentos. Por conta disso, podemos passar interfaces que podem ter sido implementadas em mais de um tipo como parâmetro ou retorno de uma função, tipo para um slice ou map, entre outros. Isso permite uma maior flexibilização no nosso código.
+
+#### Implementação
+
+Interfaces são extremamente úteis em qualquer linguagem tipada, e isso não poderia ser diferente para Go. Porém, a implementação de interfaces em Go é um pouco diferente do habitual. Vamos dar uma olhada em uma implementação de interface, e depois comentar sobre o que foi feito:
+
+```go
+// Interface
+type shape interface {
+    area() float64
+}
+// Structs
+type circle struct {
+    radius float64
+}
+type rect struct {
+    width float64
+    height float64
+}
+// Methods
+func (r rect) area() float64 {
+    return r.width * r.height
+}
+func (c circle) area() float64 {
+    return 3.1415926 * c.radius * c.radius
+}
+```
+
+Nesse exemplo nós:
+
+1. Criamos as structs cricle e rect, cada uma com suas propriedades de área (radius, width e height).
+
+2. Implementamos o método area para nossas structs, cada um com um comportamento diferente se adequando ao tipo de struct.
+
+3. Criamos nossa interface shape, que será implementada em qualquer type (no nosso caso, as structs circle e rect) que possuir o método area.
+
+Apesar de estarmos usando apenas structs no exemplo acima, interfaces não são limitadas a isso. Então vamos também apresentar outro exemplo de implementação de interfaces, mas dessa vez com outro tipo além de structs:
+
+```go
+type Incrementer interface {
+    Increment() int
+}
+type IntCounter int
+func (inc *IntCounter) Increment() int {
+    *inc++
+    return int(*ic)
+}
+
+func main() {
+    myInt := IntCounter(0)
+    var inc Incrementer = &myInt
+    for i := 0; i < 10; i++ {
+        fmt.Println(inc.Increment())
+    }
+}
+```
+
+Porém, um ponto a se atentar quando implementando interfaces é que um tipo só terá uma interface implementada se ele tiver **todas** as propriedades que foram declaradas dentro dela. Ou seja, se na nossa interface Incrementer nós tivéssemos passado além da função `Increment()` uma função `Decrement()`, nosso tipo IntCounter não teria implementado a interface Incrementer.
+
+#### Diferentes usos
+
+Agora vamos ver alguns usos para nossa interface shape:
+
+```go
+// função com parâmetro shape
+func getArea(s shape) float64 {
+    return s.area()
+}
+
+func main() {
+    // variável do tipo shape
+    var c1 shape = circle{3.75}
+    r1 := rect{9, 3}
+    // slice do tipo shape
+    shapes := []shape{c1, r1}
+
+    fmt.Println(shapes[0].area())
+    fmt.Println(getArea(shapes[1]))
+}
+```
+
+#### Embedding
+
+Algo útil para se ter em mente também é o embedding de interfaces. Semelhante ao embedding de structs, consiste na junção de parâmetros de duas interfaces, em uma:
+
+```go
+type Writer interface {
+    Write([]byte) (int, error)
+}
+type Closer interface {
+    Close() error
+}
+type WriterCloser interface {
+    Writer
+    Closer
+}
+```
+
+Tendo como base o exemplo acima, um tipo só terá a interface WriterCloser implementada caso ele possua as funções Write e Close.
+
+#### Interfaces vazia
+
+Uma interface vazia opera como uma forma de "coringa" no Go. Uma variável do tipo `interface{}`, por exemplo, pode armazenar qualquer valor. Elas são extremamente úteis quando não sabemos qual o tipo de dado que estaremos recebendo:
+
+```go
+var empty interface{}
+
+empty = 10
+fmt.Println(empty) // 10
+
+empty = "Vazio"
+fmt.Println(empty) // Vazio
+
+empty = false
+fmt.Println(empty) // false
+```
+
+Um exemplo de função que utiliza o tipo `interface{}` é a própria função `fmt.Println()`. Na [página oficial da sua implementação]([fmt package - fmt - Go Packages](https://pkg.go.dev/fmt#Println)) podemos visualizar como ela é estruturada, recebendo argumentos do tipo `interface{}`:
+
+```go
+func Println(a ...any) (n int, err error)
+// any = interface{}
+```
+
+Perceba que, na realidade, a função Println recebe argumentos do tipo `any`, que nada mais é do que um alias para `interface{}`.
+
+Porém, algo a se ter em mente é que, apesar de conseguirmos utilizar qualquer tipo de dado em uma variável do tipo `interface{}`, ela não é, na verdade, do tipo de dado atribuído. Ou seja, não há nenhuma conversão sendo feita por baixo dos panos, a variável continua sendo do tipo `interface{}`. E é nisso que nosso próximo tópico Assertion entra.
+
+#### Assertion
+
+Vamos analisar o código abaixo:
+
+```go
+var empty any // any = alias para interface{}
+
+empty = []int{1, 2, 3}
+fmt.Println(len(empty))
+```
+
+Se tentássemos rodar isso, receberíamos um erro dizendo: `invalid argument: empty (variable of type any) for len`. Para contornar esse problema, podemos fazer conversões, ou assertion de tipos em interfaces. Elas se dão com a sintaxe de `interf.(new_type)`:
+
+```go
+var empty any
+
+empty = []int{1, 2, 3}
+fmt.Println(len(empty.([]int)))
+```
+
+Esse tipo de conversão funciona para qualquer tipo de dado, desde que eles sejam compatíveis. Então tipos como `int`, `string` ou `bool`, ou qualquer outro `type` definido pelo usuário são permitidos.
+
+## Goroutine
+
+Uma Goroutine pode ser definida como uma "lightweight thread" que continua seu trabalho juntamente com a Goroutine principal (ou thread principal) da nossa aplicação, produzindo uma execução concorrente. Mas, para falar de Goroutines precisamos primeiramente entrar no tópico de threads e concurrency.
+
+#### Threads
+
+A necessidade de utilização de multireads em nossas aplicações se dá quando precisamos executar duas tarefas concorrencialmente, ou simultâneamente. O suporte a thread é fornecido pelo próprio sistema operacional no caso de threads ao nível do kernel do sistema (*Kernel-Level Thread* (KLT)), ou implementadas através de uma biblioteca de uma determinada linguagem (*User-Level Thread* (ULT)).
+
+#### Concurrency
+
+Concorrência, ou concurrency é a habilidade de diferentes partes do nosso código serem executadas fora de ordem, ou em ordem parcial, e tudo isso sem afetar o output final. Isso possibilita a execução paralela das nossas unidades de código simultâneas, o que melhora significativamente a velocidade geral da execução em sistemas multiprocessador e multinúcleo.
+
+De acordo com Rob Pike, concurrency é a composição de computações executadas independentemente. Porém, concurrency não é parallelism: Concorrência é sobre lidar com muitas coisas de uma vez, já Paralelismo é sobre fazer várias coisas de uma vez. Concorrência é sobre estrutura, paralelismo execução. Concurrency fornece uma maneira de estruturar uma solução para resolver um problema que pode (mas não necessariamente) ser paralelizável.
+
+#### Criação de Goroutines
+
+Agora vamos para de fato a utilização de goroutines. Para criar uma goroutine e poder desfrutar da sua concorrência, precisamos simplesmente utilizar a keyword `go` em frente a uma função:
+
+```go
+func main() {
+    msg := "Hey!"
+    go func() {
+        fmt.Println("Go routine!", msg)
+    }()
+    fmt.Println("Main func", msg)
+}
+```
+
+O esperado do seguinte exemplo seria o print de ambas as mensagens, porém não é isso que acontece. Na verdade, se executarmos esse código veremos apenas a execução do último `Println("Main func", msg)`. Isso acontece por conta de que quando criamos uma Goroutine ela roda de forma completamente independente da nossa aplicação. Então nosso código é lido, nossa Goroutine é identificada e iniciada, e logo em seguida o último Println é executado e nossa aplicação termina imediatamente, não dando tempo da nossa Goroutine ser propriamente executada. 
+
+Agora, se fizermos de uma forma **extremamente não recomendada** podemos contornar esse problema temporariamente:
+
+```go
+func main() {
+    msg := "Hey!"
+    go func() {
+        fmt.Println("Go routine!", msg)
+    }()
+    time.Sleep(100)
+    fmt.Println("Main func", msg)
+}
+```
+
+Assim, estamos literalmente parando a execução, ou colocando para dormir a nossa principal thread, ou principal Goroutine. Isso possibilita que a Goroutine não seja apenas iniciada, mas também propriamente executada. Então, o resultado final é o print das duas mensagens.
+
+Mas, essa certamente não é a melhor forma de se lidar com Goroutines. É para isso que existem os WaitGroups, que possibilitam uma forma mais elegante de tratarmos nossas rotinas.
+
+#### WaitGroups
+
+Como dito anteriormente, WaitGroups servem para tratarmos propriamente da execução de nossas Goroutines, e sincronizarmos elas. Eles são inclusos no [pacote sync]([sync package - sync - Go Packages](https://pkg.go.dev/sync)). Podemos dividir WaitGroup em 3 funções principais:
+
+* **wg.Add(n int)**: Especifica quantas Goroutines temos em nossa aplicação. Esse número é reduzido cada vez que utilizamos um `wd.Done()`, e assim que ele chega em 0 nosso `wg.Wait()` é terminado.
+
+* **wg.Done()**: Diminui o contador do nosso WaitGroup em um.
+
+* **wg.Wait()**: Bloqueia ou aguarda até que o contador do nosso WaitGroup seja zero.
+
+Vamos então olhar um código onde WaitGroups é implementado:
+
+```go
+var wg = sync.WaitGroup{}
+
+func main() {
+    wg.Add(2)
+
+    go firstFunc()
+    go secondFunc()
+
+    wg.Wait()
+}
+
+func firstFunc() {
+    for i := 0; i < 3; i++ {
+        fmt.Println("Func 1: ", i)
+    }
+    wg.Done()
+}
+func secondFunc() {
+    for i := 0; i < 3; i++ {
+        fmt.Println("Func 2: ", i)
+    }
+    wg.Done()
+}
+```
+
+#### Mutex
+
+Quando estamos em uma situação de race condition, talvez utilizar locks seja uma boa ideia. É nisso que Mutex entra em ação, para operar como locks em nossas aplicações. Como WaitGroup ele também faz parte do [pacote sync]([sync package - sync - Go Packages](https://pkg.go.dev/sync)), e pode ser dividido em duas principais funções:
+
+* **m.RLock()**: Aciona o lock para nossa aplicação, para nos proteger de race conditions e dados sendo sobrepostos.
+
+* **m.RUnlock()**: Desabilita o lock da nossa aplicação.
+
+Vamos olhar um código onde Mutex é implementado:
+
+```go
+var counter = 0
+var wg = sync.WaitGroup{}
+var m sync.RWMutex{}
+
+func main() {
+    for i := 0; i < 10; i++ {
+        wg.Add(2)
+        m.RLock()
+        go sayHello()
+        m.RLock()
+        go increment()
+    }
+    wg.Wait()
+}
+
+func sayHello() {
+    fmt.Println("Hello, ", counter)
+    m.RUnlock()
+    wg.Done()
+}
+func increment() {
+    counter++
+    m.RUnlock()
+    wg.Done()
+}
+```
+
+Precisamos ter bastante cuidado quando trabalhando com lockers. No exemplo acima, nossa aplicação passou de concorrente, para basicamente single threaded, já que cada Goroutine só é executada quando a anterior termina. Porém, é claro que temos uma forma mais dinâmica e segura para manipulação de dados dentro de Goroutines, os Channels.
+
+Vale também lembrar que sempre podemos checar race conditions em nosso código passando a flag `-race` na execução. Por exemplo:
+
+```bash
+go run -race src/main.go
+```
+
+#### GOMAXPROCS
+
+`GOMAXPROCS()` é uma função do [pacote runtine]([runtime package - runtime - Go Packages](https://pkg.go.dev/runtime)), que nos permite manipular o número de CPUs usadas na nossa aplicação.
+
+```go
+func GOMAXPROCS(n int) int
+```
+
+```go
+runtime.GOMAXPROCS(2) // limitando o número de CPUs para dois
+```
+
+Isso pode ser útil para fins de testes. Por exemplo, testar nossa aplicação de uma forma single threaded definindo `GOMAXPROCS(1)`.
+
+## Channels
+
+Quando outras linguagens de programação mais conhecidas, como C, Java, C++, entre outras foram criadas, o conceito de múltiplos CPUs não era muito bem definido ainda, então elas foram feitas pensando em aplicações single core. Isso resultou em implementações posteriores para o trabalho com concorrência e paralelismo de uma forma, normalmente, não muito boa. Go por outro lado, desde sua criação o principal objetivo da linguagem sempre foi ser o mais eficiente e otimizável possível em concorrência e paralelismo. É nisso que conceitos como Goroutines e Channels realmente se destacam entre outras linguagens.
+
+Channels podem ser definidos como a forma mais eficiente que Goroutines utilizam para se comunicar. É o conceito mais importante para se entender após o estudo de Goroutines.
+
+#### Criação de Channels
+
+Para criar channels, nós precisaremos fazer uso da função `make()`, e especificar qual o tipo de dado que será transmitido nesse canal:
+
+```go
+// Sem buffer:
+chNoBuffer := make(chan int)
+// Com buffer de 50:
+chBuffer := make (chan int, 50)
+```
+
+#### Envio e recepção
+
+Para enviar dados e receber dados através de canais em Go, utilizaremos o operador `<-`. Basicamente sempre que a seta estiver apontando para o channel, o dado está sendo enviado para o channel, e sempre que a seta estiver apontando para o dado, ele está sendo recebido:
+
+```go
+var wg = sync.WaitGroup{}
+
+func main() {
+    ch := make(chan int)
+    wg.Add(2)
+    // receiver
+    go func() {
+        i := <- ch
+        fmt.Println(i)
+        wg.Done()
+    }()
+    // sender
+    go func() {
+        i := 40
+        ch <- i
+        close(ch)
+        wg.Done()
+    }()
+    wg.Wait()
+}
+```
+
+Nesse código estamos criando duas Goroutines e nosso canal de comunição, que receberá dados do tipo int. Após isso, nossa primeira função anônima estará recebendo o dado que futuramente será armazenado em nosso canal. Já nossa segunda função está de fato enviando o dado `i := 40` através do canal, e também fechando o nosso canal com a função `close()`, para sinalizar para noss aplicação que não estaremos mais enviando dados através desse channel. E claro, o resultado final é o print do número 40. 
+
+Um ponto para ser destacado disso é o fechamento do canal. Precisamos ser muito cuidadosos quando fechando um canal, já que uma vez fechado, o mesmo nunca mais poderá ser aberto e não poderemos mais enviar dados através dele.
+
+Uma boa prática para definição de funções de envio e recepção é definir o channel de recepção (`<-chan`) ou envio (`chan<-`) como parâmetro na função. Por exemplo:
+
+```go
+ch := make(chan int)
+// receiver
+go func(ch <-chan int) {
+    /// ...
+}(ch)
+//sender
+go func(ch chan<- int) {
+    // ...
+}(ch)
+```
+
+#### Buffers
+
+Para explicar buffers, vamos primeiramente olhar um exemplo:
+
+```go
+var wg = sync.WaitGroup{}
+
+func main() {
+    ch := make(chan int)
+    wg.Add(2)
+    // receiver
+    go func() {
+        i := <- ch
+        fmt.Println(i)
+        wg.Done()
+    }()
+    // sender
+    go func() {
+        i := 40
+        ch <- i
+        ch <- i+1
+        close(ch)
+        wg.Done()
+    }()
+    wg.Wait()
+}
+```
+
+Se rodássemos o código acima receberíamos um erro de deadlock, por conta de estarmos tentando enviar mais dados do que estamos recebendo. Isso acontece na linha `ch <- i+1`, onde estamos enviando mais um dado através de nosso canal, mas não temos nenhuma forma de receber esse dado. Logo a aplicação não sabe o que fazer com ele, resultando em um erro.
+
+São em casos assim que poderíamos utilizar buffers. Buffers são feitos para armazenar dados internamente em nosso canais enquanto eles ainda não são utilizados. Como já foi visto, para declarar um buffer basta passar como segundo argumento na função make o tamanho do mesmo. Por exemplo, `ch := make(chan int, 100)`  criaria um canal com buffer interno de tamanho 100.
+
+Porém, é bom ressaltar que não devemos usar buffers em qualquer situação, já que isso pode ser apenas um "remendo" para um código ruim. Sempre devemos manter de forma sincronizada o envio e a recepção dos nossos dados, e apenas utilizar buffers caso nossos receptores precisem de um pouco mais de tempo para processar esses dados, e não para simplesmente ignorar os dados enviados.
+
+#### Loops
+
+Já que especificar um número pré estabelecido de senders e receivers para nosso canais pode ser um tanto quanto inviável, podemos utilizar loops para facilitar nosso trabalho:
+
+```go
+var wg = sync.WaitGroup{}
+
+func main() {
+	ch := make(chan int)
+	data := []int{1, 2, 3, 4, 5}
+	wg.Add(2)
+	go func(ch <-chan int) {
+		for i := range ch {
+			fmt.Println(i)
+		}
+		wg.Done()
+	}(ch)
+	go func(ch chan<- int) {
+		for i := range data {
+			ch <- data[i]
+		}
+		close(ch)
+		wg.Done()
+	}(ch)
+	wg.Wait()
+}
+```
+
+No caso estamos utilizando um loop (`for i := range data`) para pegar os dados do nosso slice, e outro para receber os dados enviados (`for i := range ch`).
+
+Também temos outra forma de realizar loops em channels:
+
+```go
+for {
+    if i, ok := <- ch; ok {
+        fmt.Println(i)
+    } else {
+        break
+    }
+}
+```
+
+Aqui estamos essencialmente testando se há algum erro em nosso channel. Isso pode ser útil para casos onde o canal não foi fechado ainda, mas todos os dados nele já foram recebidos.
+
+#### Select
+
+Quando se estamos trabalhando com múltiplos canais, uma boa alternativa para receber os dados deles em uma única Goroutine é o uso de select:
+
+```go
+var wg = sync.WaitGroup{}
+
+func main() {
+    ch1 := make(chan int)
+    ch2 := make(chan int)
+    wg.Add(2)
+    go func() {
+        ch1 <- 10
+        close(ch1)
+        wg.Done()
+    }()
+    go func() {
+        select {
+            case entry := <- ch1:
+                fmt.Println("Channel 1:", entry)
+            case entry := <- ch2:
+                fmt.Println("Channel 2:", entry)
+        }
+        wg.Done()
+    }()
+    wg.Wait()
+}
+```
+
+Dessa forma podemos ter uma lógica diferente para o recebimento de dados de cada channel.
