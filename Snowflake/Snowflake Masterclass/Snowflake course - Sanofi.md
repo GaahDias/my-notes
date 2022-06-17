@@ -429,7 +429,7 @@ Porém, enquanto os métodos apresentados acima ainda são muito importantes e b
 
 Para a melhor separação de trabalhos, otimização de recursos e controle de acessos, podemos criar diferentes DWs virtuais para cada grupo específico do nosso projeto. Por exemplo:
 
-![Diferentes Setores](https://user-images.githubusercontent.com/36492293/173667852-5ea28cf8-6ac5-4304-96cb-82b255b1ed78.png)
+![Diferentes Setores](Screenshots/roles-and-sectors.png)
 
 Cada grupo ilustrado na imagem acima teria acesso a um DW virtual diferente, com diferentes permissões e recursos. Agora vamos ver como fazer a criação desses Datawarehouses:
 
