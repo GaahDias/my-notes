@@ -483,3 +483,57 @@ CREATE USER DBA2 PASSWORD = 'DBA2' LOGIN_NAME = 'DBA2' DEFAULT_ROLE='DBA' DEFAUL
 GRANT ROLE DBA TO USER DBA1;
 GRANT ROLE DBA TO USER DBA2;
 ```
+### Cache
+
+O Snowflake oferece um sistema de caching interno para queries SQL executadas recentemente. Os resultados das queries são armazenados por 24 horas ou até que os dados resultados da querry tenham sido alterados. Isso é extremamente útil tanto em questão de performance, quanto no tempo economizado para grandes queries.
+
+O cache é armazeado por warehouse, e não por usuário. Então, para maximizar nossa performance, pode ser útil providenciar uma warehouse para uma equipe inteira que vai utilizar queries similares para analisar os dados. Assim, estaremos extraindo o máximo possível do nosso cache.
+
+### Clusters
+
+Dentro do Snowflake podemos melhorar imensamente a performance da nossa Data Warehouse utilizando Clusters. Essa técnica gira em torno do uso de microparticionamento em nossas tabelas, ou seja, dividí-las em várias partes diferentes. Esse particionamento será feito com base na cluster key, que nada mais é que a colunas/colunas ou expressão/expressões especificadas na criação do nosso cluster. Isso pode melhorar significativamente o tempo de execução de queries envolvendo nossa tabela, já que só se fará necessário a procura de dados em uma partição dela, e não na tabela inteira.
+
+![Cluster Keys](https://user-images.githubusercontent.com/36492293/175090292-8f8da1bc-1f48-4312-a210-59273a9ef84f.png)
+
+Vamos agora olhar como adicionar uma cluster key em uma tabela:
+
+```sql
+CREATE OR REPLACE TABLE ORDERS_CACHING (
+  ORDER_ID	VARCHAR(30)
+  ,AMOUNT	NUMBER(38,0)
+  ,PROFIT	NUMBER(38,0)
+  ,QUANTITY	NUMBER(38,0)
+  ,CATEGORY	VARCHAR(30)
+  ,SUBCATEGORY	VARCHAR(30)
+  ,DATE DATE
+)    
+
+// Inserting a large amount of data
+INSERT INTO ORDERS_CACHING 
+  SELECT
+  t1.ORDER_ID
+  ,t1.AMOUNT	
+  ,t1.PROFIT	
+  ,t1.QUANTITY	
+  ,t1.CATEGORY	
+  ,t1.SUBCATEGORY	
+  ,DATE(UNIFORM(1500000000,1700000000,(RANDOM())))
+FROM ORDERS t1
+CROSS JOIN (SELECT * FROM ORDERS) t2
+CROSS JOIN (SELECT TOP 100 * FROM ORDERS) t3
+
+// Adding cluster key based on DATE column
+ALTER TABLE ORDERS_CACHING CLUSTER BY ( DATE ) 
+
+SELECT * FROM ORDERS_CACHING  WHERE DATE = '2020-01-05'
+
+// Adding cluster key based on expression MONTH(DATE)
+ALTER TABLE ORDERS_CACHING CLUSTER BY ( MONTH(DATE) )
+
+SELECT * FROM ORDERS_CACHING  WHERE MONTH(DATE)=11
+```
+
+Porém, nem sempre é necessário o uso de clusters. Normalmente tabelas que tem mais necessidade de clusters são tabelas que: 
+* São muito grande em tamanho, por volta dos terabytes de dados.
+* Tem colunas que são frequentemente usadas em joins.
+* Possuem colunas que são frequentemente usadas em where clauses.
