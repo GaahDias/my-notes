@@ -537,3 +537,110 @@ Porém, nem sempre é necessário o uso de clusters. Normalmente tabelas que tem
 * São muito grande em tamanho, por volta dos terabytes de dados.
 * Tem colunas que são frequentemente usadas em joins.
 * Possuem colunas que são frequentemente usadas em where clauses.
+
+## Snowpipe
+
+Essa é uma das muitas funcionalidades imbutidas no Snowflake. Com Snowpipe podemos automatizar o recebimento e carregamento de dados em buckets no nosso banco de dados. 
+
+![Snowpipe](Screenshots/snowpipe-overview.png)
+
+### Criando um Snowpipe
+
+Para utilizarmos o Snowpipe, precisamos primeiramente seguir alguns passos báscios:
+
+1. Criar um stage de conexão com nosso bucket
+2. Testar um copy command, para carregar os dados em nossa tabela
+3. Criar um pipe object
+4. Ativar as notificações s3
+
+```SQL
+// Create table first
+CREATE OR REPLACE TABLE OUR_FIRST_DB.PUBLIC.employees (
+  id INT,
+  first_name STRING,
+  last_name STRING,
+  email STRING,
+  location STRING,
+  department STRING
+  )
+    
+
+// Create file format object
+CREATE OR REPLACE file format MANAGE_DB.file_formats.csv_fileformat
+    type = csv
+    field_delimiter = ','
+    skip_header = 1
+    null_if = ('NULL','null')
+    empty_field_as_null = TRUE;   
+    
+ // Create stage object with integration object & file format object
+CREATE OR REPLACE stage MANAGE_DB.external_stages.csv_folder
+    URL = 's3://snowflakes3bucket123/csv/snowpipe'
+    STORAGE_INTEGRATION = s3_int
+    FILE_FORMAT = MANAGE_DB.file_formats.csv_fileformat
+
+// Create schema to keep things organized
+CREATE OR REPLACE SCHEMA MANAGE_DB.pipes
+
+// Define pipe
+CREATE OR REPLACE pipe MANAGE_DB.pipes.employee_pipe
+auto_ingest = TRUE
+AS
+COPY INTO OUR_FIRST_DB.PUBLIC.employees
+FROM @MANAGE_DB.external_stages.csv_folder
+```
+
+### Configurando notificações
+
+Isso será diferente de plataforma para plataforma, mas vamos utilizar a AWS como base para esse exemplo. 
+
+Para ativar as notificações de evento, navegue até *Bucket > Properties > Event Notifications > Create Event Notification*. Após isso, coloque um nome apropriado, e selecione todos os "Object create event" em Event Types. Por fim, em Destination marque SQS queue e Enter SQS queue ARN.
+
+Para ter nossa SQS qeue ARN, precisaremos saber o notification channel de nosso Snowpipe. Para isso, verifique a coluna `notification_channel` com o comando:
+
+```SQL
+// Describe pipe
+DESC pipe employee_pipe
+```
+
+Após tudo isso nossa notificação de eventos deve estar configurada corretamente, e se adicionarmos um arquivo novo em nosso bucket, o mesmo será carregado automaticamente em nosso DB utilizando o Snowpipe.
+
+### Gerenciando pipes
+
+Conforme formos adicionando Snowpipes, é importante que também saibamos como gerenciar os mesmos. Temos alguns comandos disponíveis para isso:
+
+```SQL
+// Basic commands 
+DESC pipe MANAGE_DB.pipes.employee_pipe;
+
+SHOW PIPES;
+
+SHOW PIPES like '%something%'
+
+SHOW PIPES in database MANAGE_DB
+
+SHOW PIPES in schema MANAGE_DB.pipes
+
+SHOW PIPES like '%something%' in Database MANAGE_DB
+
+// Pause pipe
+ALTER PIPE MANAGE_DB.pipes.employee_pipe SET PIPE_EXECUTION_PAUSED = true
+ 
+// Verify pipe status
+SELECT SYSTEM$PIPE_STATUS('MANAGE_DB.pipes.employee_pipe') 
+ 
+ // Recreate the pipe to change the COPY statement in the definition
+CREATE OR REPLACE pipe MANAGE_DB.pipes.employee_pipe
+auto_ingest = TRUE
+AS
+COPY INTO OUR_FIRST_DB.PUBLIC.employees2
+FROM @MANAGE_DB.external_stages.csv_folder  
+
+ALTER PIPE  MANAGE_DB.pipes.employee_pipe refresh
+
+// Resume pipe
+ALTER PIPE MANAGE_DB.pipes.employee_pipe SET PIPE_EXECUTION_PAUSED = false
+
+// Verify pipe status again
+SELECT SYSTEM$PIPE_STATUS('MANAGE_DB.pipes.employee_pipe') 
+```
